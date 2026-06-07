@@ -114,8 +114,9 @@ function createOrder(){
  sold:false,
  salePrice:(game==="喷喷3"?250:(game==="人森"?275:"")),
  soldTime:"",
- fx:false,
- fxTime:"",
+ fx:false,          // 是否购汇
+ fxAmount:"",       // 购汇金额(美元) 新增字段
+ fxTime:"",         // 购汇时间（保留，标记购汇时自动填充）
  sellWay:"直接转账",
  isReceive:false,
  isTransfer:false
@@ -207,9 +208,13 @@ function showOrder(id){
  ${sellWayHtml}
  </div>
  <div>
- <label>购汇时间</label>
+ <div class="check-item">
+   <input type="checkbox" id="isFX_${id}" ${o.fx?'checked':''}>
+   <span>是否购汇</span>
+ </div>
+ <label>购汇金额（美元）</label>
  <div class="flex-row">
- <input id="fxTime_${id}" value="${o.fxTime}" style="flex:1">
+ <input id="fxAmount_${id}" value="${o.fxAmount||''}" type="number" step="0.01" style="flex:1">
  <button onclick="markFX('${id}')">标记购汇</button>
  </div>
  </div>
@@ -249,10 +254,12 @@ function saveEdit(id){
    o.code=document.getElementById("code_"+id).value;
    o.codeTime=document.getElementById("codeTime_"+id).value;
    o.soldTime=document.getElementById("soldTime_"+id).value;
-   o.fxTime=document.getElementById("fxTime_"+id).value;
    o.salePrice=document.getElementById("price_"+id).value;
    o.sellWay = document.getElementById("sellWay_"+id).value;
    o.isReceive = document.getElementById("isReceive_"+id)?.checked || false;
+   // 新增是否购汇和购汇金额保存
+   o.fx = document.getElementById("isFX_"+id).checked;
+   o.fxAmount = document.getElementById("fxAmount_"+id).value;
    if(document.getElementById("isTransfer_"+id)){
      o.isTransfer = document.getElementById("isTransfer_"+id).checked;
    }
@@ -273,7 +280,7 @@ function markSold(id){
 function markFX(id){
  update(id,o=>{
    o.fx=true;
-   if(!o.fxTime) o.fxTime=nowStr();
+   if(!o.fxTime) o.fxTime=nowStr(); // 保留购汇时间记录（标记时自动填充）
  });
 }
 function deleteOrder(id){
