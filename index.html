@@ -16,17 +16,17 @@ body{font-family:Arial;margin:0;background:#f4f6f8}
 .left{width:100%;overflow:auto;background:#fff;padding:15px;box-sizing:border-box}
 .right{width:100%;overflow:auto;padding:15px;box-sizing:border-box}
 .card{background:#fff;padding:15px;border-radius:10px;margin-bottom:12px}
-input,select{padding:6px;margin-top:4px;width:100%;box-sizing:border-box}
-button{padding:6px 10px;margin:2px;cursor:pointer;border:0;border-radius:4px;background:#eee;}
+input,select{padding:6px;margin-top:4px;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;}
+button{padding:6px 10px;margin:6px 2px 2px 0;cursor:pointer;border:0;border-radius:4px;background:#eee;}
 .order{border:1px solid #ddd;padding:10px;margin-bottom:8px;border-radius:8px;cursor:pointer}
 .order:hover{background:#f8f8f8}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .small{color:#666;font-size:12px}
 .filter button{margin-right:6px}
-.flex-row{display:flex;gap:6px;align-items:center}
 .hidden{display:none;}
-.check-item{display:flex;align-items:center;gap:4px;margin-top:4px;}
+.check-item{display:flex;align-items:center;gap:4px;margin-top:8px;margin-bottom:4px;}
 .check-item input{width:auto;}
+.time-item{margin: 8px 0;}
 </style>
 </head>
 <body>
@@ -74,6 +74,7 @@ function setFilter(f){
  currentFilter=f;
  renderList();
 }
+// 获取标准时间格式
 function nowStr(){
  const d=new Date();
  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+
@@ -81,16 +82,19 @@ function nowStr(){
  String(d.getHours()).padStart(2,'0')+":"+
  String(d.getMinutes()).padStart(2,'0');
 }
+// 本地存储操作
 function save(data){
  localStorage.setItem("jpOrders",JSON.stringify(data));
 }
 function load(){
  return JSON.parse(localStorage.getItem("jpOrders")||"[]");
 }
+// 切换游戏为其他时展示输入框
 document.getElementById("game").onchange=()=>{
  document.getElementById("otherBox").style.display=
  document.getElementById("game").value==="其他"?"block":"none";
 }
+// 新建订单
 function createOrder(){
  let game=document.getElementById("game").value;
  let name=game;
@@ -114,16 +118,18 @@ function createOrder(){
  sold:false,
  salePrice:(game==="喷喷3"?250:(game==="人森"?275:"")),
  soldTime:"",
- fx:false,          // 是否购汇
- fxAmount:"",       // 购汇金额(美元) 新增字段
- fxTime:"",         // 购汇时间（保留，标记购汇时自动填充）
+ fx:false,
+ fxAmount:"",
+ fxTime:"",
  sellWay:"直接转账",
  isReceive:false,
+ receiveTime:"",
  isTransfer:false
  });
  save(data);
  renderList();
 }
+// 渲染订单列表，所有状态独立展示
 function renderList(){
  let data=load().slice().reverse();
  if(currentFilter!=="all"){
@@ -131,30 +137,33 @@ function renderList(){
  }
  let html="";
  data.forEach(o=>{
+   let statusText = [];
+   if(o.codeStatus) statusText.push('🎮已出码');
+   if(o.sold) statusText.push('💰已售出');
+   if(o.fx) statusText.push('💱已购汇');
+   if(o.isReceive) statusText.push('✅已确收');
+   if(statusText.length === 0) statusText.push('🛒已下单');
+
    html+=`
    <div class="order" onclick="showOrder('${o.id}')">
    <b>${o.owner} ${o.game}</b><br>
    <span class="small">${o.id}</span><br>
-   <span class="small">
-   ${o.fx ? '✅已购汇' : o.sold ? '💰已售出' : o.codeStatus ? '🎮已出码' : '🛒已下单'}
-   </span>
+   <span class="small">${statusText.join(' | ')}</span>
    </div>`;
  });
  document.getElementById("orderList").innerHTML=html;
 }
+// 展示订单详情（核心：固定确收区域，不再动态切换）
 function showOrder(id){
  let data=load();
  let o=data.find(x=>x.id===id);
+ // 售出方式下拉框，保留两个选项，无额外联动逻辑
  let sellWayHtml = `
   <label>售出方式</label>
-  <select id="sellWay_${id}" onchange="toggleReceiveCheck('${id}')">
+  <select id="sellWay_${id}">
     <option value="直接转账" ${o.sellWay==='直接转账'?'selected':''}>直接转账</option>
     <option value="走闲鱼" ${o.sellWay==='走闲鱼'?'selected':''}>走闲鱼</option>
   </select>
-  <div id="receiveWrap_${id}" class="${o.sellWay==='走闲鱼'?'':'hidden'} check-item">
-    <input type="checkbox" id="isReceive_${id}" ${o.isReceive?'checked':''}>
-    <span>是否确认收货</span>
-  </div>
  `;
  let transferCheckHtml = '';
  if(o.owner === '🚗'){
@@ -166,62 +175,60 @@ function showOrder(id){
   `;
  }
 
+ // 页面布局：确收时间+标记确收 永久显示
  document.getElementById("detail").innerHTML=`
  <div class="card">
  <h2>${o.owner} ${o.game}</h2>
  <div class="grid">
  <div>
- <label>订单号
+ <label>订单号</label>
  <input value="${o.id}" readonly>
- </label>
  </div>
  <div>
- <label>日元成本
+ <label>日元成本</label>
  <input value="${o.jpy}">
- </label>
  </div>
  <div>
- <label>下单时间
+ <label>下单时间</label>
  <input id="orderTime_${id}" value="${o.orderTime}">
- </label>
  </div>
  <div>
- <label>兑换码
+ <label>兑换码</label>
  <input id="code_${id}" value="${o.code||''}">
- </label>
  </div>
- <div>
- <label>出码时间</label>
- <div class="flex-row">
- <input id="codeTime_${id}" value="${o.codeTime}" style="flex:1">
- <button onclick="markCode('${id}')">标记出码</button>
+
+ <div class="time-item">
+  <label>出码时间</label>
+  <input id="codeTime_${id}" value="${o.codeTime}">
+  <button onclick="markCode('${id}')">标记出码</button>
  </div>
+
+ <div class="time-item">
+  <label>售出时间</label>
+  <input id="soldTime_${id}" value="${o.soldTime}">
+  <button onclick="markSold('${id}')">标记售出</button>
  </div>
- <div>
- <label>售出时间</label>
- <div class="flex-row">
- <input id="soldTime_${id}" value="${o.soldTime}" style="flex:1">
- <button onclick="markSold('${id}')">标记售出</button>
- </div>
- </div>
+
  <div>
  ${sellWayHtml}
  </div>
+
+ <!-- 确收区域：固定显示，不受售出方式影响 -->
+ <div class="time-item">
+  <label>确收时间</label>
+  <input id="receiveTime_${id}" value="${o.receiveTime||''}">
+  <button onclick="markReceive('${id}')">标记确收</button>
+ </div>
+
+ <div class="time-item">
+  <label>购汇金额（美元）</label>
+  <input id="fxAmount_${id}" value="${o.fxAmount||''}" type="number" step="0.01">
+  <button onclick="markFX('${id}')">标记购汇</button>
+ </div>
+
  <div>
- <div class="check-item">
-   <input type="checkbox" id="isFX_${id}" ${o.fx?'checked':''}>
-   <span>是否购汇</span>
- </div>
- <label>购汇金额（美元）</label>
- <div class="flex-row">
- <input id="fxAmount_${id}" value="${o.fxAmount||''}" type="number" step="0.01" style="flex:1">
- <button onclick="markFX('${id}')">标记购汇</button>
- </div>
- </div>
- <div>
- <label>售价
+ <label>售价</label>
  <input id="price_${id}" value="${o.salePrice||''}">
- </label>
  ${transferCheckHtml}
  </div>
  </div>
@@ -230,16 +237,8 @@ function showOrder(id){
  <button onclick="deleteOrder('${id}')">删除</button>
  </div>`;
 }
-// 切换售出方式，显示/隐藏确认收货勾选
-function toggleReceiveCheck(id){
- let way = document.getElementById("sellWay_"+id).value;
- let wrap = document.getElementById("receiveWrap_"+id);
- if(way === "走闲鱼"){
-  wrap.classList.remove("hidden");
- }else{
-  wrap.classList.add("hidden");
- }
-}
+
+// 通用更新方法
 function update(id,fn){
  let data=load();
  let o=data.find(x=>x.id===id);
@@ -248,6 +247,8 @@ function update(id,fn){
  renderList();
  showOrder(id);
 }
+
+// 保存所有编辑内容
 function saveEdit(id){
  update(id,o=>{
    o.orderTime=document.getElementById("orderTime_"+id).value;
@@ -256,39 +257,56 @@ function saveEdit(id){
    o.soldTime=document.getElementById("soldTime_"+id).value;
    o.salePrice=document.getElementById("price_"+id).value;
    o.sellWay = document.getElementById("sellWay_"+id).value;
-   o.isReceive = document.getElementById("isReceive_"+id)?.checked || false;
-   // 新增是否购汇和购汇金额保存
-   o.fx = document.getElementById("isFX_"+id).checked;
+   o.receiveTime = document.getElementById("receiveTime_"+id).value;
    o.fxAmount = document.getElementById("fxAmount_"+id).value;
    if(document.getElementById("isTransfer_"+id)){
      o.isTransfer = document.getElementById("isTransfer_"+id).checked;
    }
  });
 }
+
+// 标记出码
 function markCode(id){
  update(id,o=>{
    o.codeStatus=true;
    if(!o.codeTime) o.codeTime=nowStr();
  });
 }
+
+// 标记售出
 function markSold(id){
  update(id,o=>{
    o.sold=true;
    if(!o.soldTime) o.soldTime=nowStr();
  });
 }
+
+// 标记购汇
 function markFX(id){
  update(id,o=>{
    o.fx=true;
-   if(!o.fxTime) o.fxTime=nowStr(); // 保留购汇时间记录（标记时自动填充）
+   if(!o.fxTime) o.fxTime=nowStr();
  });
 }
+
+// 标记确收
+function markReceive(id){
+ update(id,o=>{
+   o.isReceive=true;
+   if(!o.receiveTime) o.receiveTime=nowStr();
+ });
+}
+
+// 删除订单
 function deleteOrder(id){
  if(!confirm("确定删除？")) return;
  let data=load().filter(x=>x.id!==id);
- save(data);
  document.getElementById("detail").innerHTML='<div class="card">请选择订单</div>';
+ save(data);
+ renderList();
 }
+
+// 页面初始化
 renderList();
 </script>
 </body>
