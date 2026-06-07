@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>日亚 Switch 游戏订单管理 Pro</title>
+<style>
+body{font-family:Arial;margin:0;background:#f4f6f8}
+.header{background:#222;color:#fff;padding:15px 20px}
+.wrap{display:flex;flex-direction:column;height:auto;min-height:100vh}
+@media (min-width: 768px){
+  .wrap{flex-direction:row;height:calc(100vh - 60px);}
+  .left{width:35%;border-right:1px solid #ddd;}
+  .right{flex:1;}
+}
+.left{width:100%;overflow:auto;background:#fff;padding:15px;box-sizing:border-box}
+.right{width:100%;overflow:auto;padding:15px;box-sizing:border-box}
+.card{background:#fff;padding:15px;border-radius:10px;margin-bottom:12px}
+input,select{padding:6px;margin-top:4px;width:100%;box-sizing:border-box}
+button{padding:6px 10px;margin:2px;cursor:pointer;border:0;border-radius:4px;background:#eee;}
+.order{border:1px solid #ddd;padding:10px;margin-bottom:8px;border-radius:8px;cursor:pointer}
+.order:hover{background:#f8f8f8}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.small{color:#666;font-size:12px}
+.filter button{margin-right:6px}
+.flex-row{display:flex;gap:6px;align-items:center}
+.hidden{display:none;}
+.check-item{display:flex;align-items:center;gap:4px;margin-top:4px;}
+.check-item input{width:auto;}
+</style>
+</head>
+<body>
+<div class="header">
+<h2>日亚 Switch 游戏订单管理 Pro</h2>
+</div>
+<div class="wrap">
+<div class="left">
+<div class="card">
+<h3>新建订单</h3>
+<label>归属人</label>
+<select id="owner">
+<option value="🍻">🍻</option>
+<option value="🚗">🚗</option>
+</select>
+<label>游戏</label>
+<select id="game">
+<option>喷喷3</option>
+<option>人森</option>
+<option>其他</option>
+</select>
+<div id="otherBox" style="display:none">
+<label>游戏名称<input id="otherName"></label>
+<label>价格(日元)<input id="otherJPY" type="number"></label>
+</div>
+<button onclick="createOrder()">创建订单</button>
+</div>
+<div class="card">
+<h3>订单列表</h3>
+<div class="filter">
+<button onclick="setFilter('all')">全部</button>
+<button onclick="setFilter('🍻')">🍻</button>
+<button onclick="setFilter('🚗')">🚗</button>
+</div>
+<div id="orderList"></div>
+</div>
+</div>
+<div class="right">
+<div id="detail"><div class="card">请选择订单</div></div>
+</div>
+</div>
+<script>
+let currentFilter="all";
+function setFilter(f){
+ currentFilter=f;
+ renderList();
+}
+function nowStr(){
+ const d=new Date();
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+
+ String(d.getDate()).padStart(2,'0')+" "+
+ String(d.getHours()).padStart(2,'0')+":"+
+ String(d.getMinutes()).padStart(2,'0');
+}
+function save(data){
+ localStorage.setItem("jpOrders",JSON.stringify(data));
+}
+function load(){
+ return JSON.parse(localStorage.getItem("jpOrders")||"[]");
+}
+document.getElementById("game").onchange=()=>{
+ document.getElementById("otherBox").style.display=
+ document.getElementById("game").value==="其他"?"block":"none";
+}
+function createOrder(){
+ let game=document.getElementById("game").value;
+ let name=game;
+ let jpy=0;
+ if(game==="喷喷3") jpy=5787;
+ if(game==="人森") jpy=6390;
+ if(game==="其他"){
+   name=document.getElementById("otherName").value;
+   jpy=document.getElementById("otherJPY").value;
+ }
+ let data=load();
+ data.push({
+ id:"ORD"+Date.now(),
+ owner:document.getElementById("owner").value,
+ game:name,
+ jpy:jpy,
+ orderTime:nowStr(),
+ codeStatus:false,
+ code:"",
+ codeTime:"",
+ sold:false,
+ salePrice:(game==="喷喷3"?250:(game==="人森"?275:"")),
+ soldTime:"",
+ fx:false,
+ fxTime:"",
+ sellWay:"直接转账",
+ isReceive:false,
+ isTransfer:false
+ });
+ save(data);
+ renderList();
+}
+function renderList(){
+ let data=load().slice().reverse();
+ if(currentFilter!=="all"){
+   data=data.filter(o=>o.owner===currentFilter);
+ }
+ let html="";
+ data.forEach(o=>{
+   html+=`
+   <div class="order" onclick="showOrder('${o.id}')">
+   <b>${o.owner} ${o.game}</b><br>
+   <span class="small">${o.id}</span><br>
+   <span class="small">
+   ${o.fx ? '✅已购汇' : o.sold ? '💰已售出' : o.codeStatus ? '🎮已出码' : '🛒已下单'}
+   </span>
+   </div>`;
+ });
+ document.getElementById("orderList").innerHTML=html;
+}
+function showOrder(id){
+ let data=load();
+ let o=data.find(x=>x.id===id);
+ let sellWayHtml = `
+  <label>售出方式</label>
+  <select id="sellWay_${id}" onchange="toggleReceiveCheck('${id}')">
+    <option value="直接转账" ${o.sellWay==='直接转账'?'selected':''}>直接转账</option>
+    <option value="走闲鱼" ${o.sellWay==='走闲鱼'?'selected':''}>走闲鱼</option>
+  </select>
+  <div id="receiveWrap_${id}" class="${o.sellWay==='走闲鱼'?'':'hidden'} check-item">
+    <input type="checkbox" id="isReceive_${id}" ${o.isReceive?'checked':''}>
+    <span>是否确认收货</span>
+  </div>
+ `;
+ let transferCheckHtml = '';
+ if(o.owner === '🚗'){
+  transferCheckHtml = `
+  <div class="check-item">
+    <input type="checkbox" id="isTransfer_${id}" ${o.isTransfer?'checked':''}>
+    <span>是否转钱</span>
+  </div>
+  `;
+ }
+
+ document.getElementById("detail").innerHTML=`
+ <div class="card">
+ <h2>${o.owner} ${o.game}</h2>
+ <div class="grid">
+ <div>
+ <label>订单号
+ <input value="${o.id}" readonly>
+ </label>
+ </div>
+ <div>
+ <label>日元成本
+ <input value="${o.jpy}">
+ </label>
+ </div>
+ <div>
+ <label>下单时间
+ <input id="orderTime_${id}" value="${o.orderTime}">
+ </label>
+ </div>
+ <div>
+ <label>兑换码
+ <input id="code_${id}" value="${o.code||''}">
+ </label>
+ </div>
+ <div>
+ <label>出码时间</label>
+ <div class="flex-row">
+ <input id="codeTime_${id}" value="${o.codeTime}" style="flex:1">
+ <button onclick="markCode('${id}')">标记出码</button>
+ </div>
+ </div>
+ <div>
+ <label>售出时间</label>
+ <div class="flex-row">
+ <input id="soldTime_${id}" value="${o.soldTime}" style="flex:1">
+ <button onclick="markSold('${id}')">标记售出</button>
+ </div>
+ </div>
+ <div>
+ ${sellWayHtml}
+ </div>
+ <div>
+ <label>购汇时间</label>
+ <div class="flex-row">
+ <input id="fxTime_${id}" value="${o.fxTime}" style="flex:1">
+ <button onclick="markFX('${id}')">标记购汇</button>
+ </div>
+ </div>
+ <div>
+ <label>售价
+ <input id="price_${id}" value="${o.salePrice||''}">
+ </label>
+ ${transferCheckHtml}
+ </div>
+ </div>
+ <hr>
+ <button onclick="saveEdit('${id}')">保存修改</button>
+ <button onclick="deleteOrder('${id}')">删除</button>
+ </div>`;
+}
+// 切换售出方式，显示/隐藏确认收货勾选
+function toggleReceiveCheck(id){
+ let way = document.getElementById("sellWay_"+id).value;
+ let wrap = document.getElementById("receiveWrap_"+id);
+ if(way === "走闲鱼"){
+  wrap.classList.remove("hidden");
+ }else{
+  wrap.classList.add("hidden");
+ }
+}
+function update(id,fn){
+ let data=load();
+ let o=data.find(x=>x.id===id);
+ fn(o);
+ save(data);
+ renderList();
+ showOrder(id);
+}
+function saveEdit(id){
+ update(id,o=>{
+   o.orderTime=document.getElementById("orderTime_"+id).value;
+   o.code=document.getElementById("code_"+id).value;
+   o.codeTime=document.getElementById("codeTime_"+id).value;
+   o.soldTime=document.getElementById("soldTime_"+id).value;
+   o.fxTime=document.getElementById("fxTime_"+id).value;
+   o.salePrice=document.getElementById("price_"+id).value;
+   o.sellWay = document.getElementById("sellWay_"+id).value;
+   o.isReceive = document.getElementById("isReceive_"+id)?.checked || false;
+   if(document.getElementById("isTransfer_"+id)){
+     o.isTransfer = document.getElementById("isTransfer_"+id).checked;
+   }
+ });
+}
+function markCode(id){
+ update(id,o=>{
+   o.codeStatus=true;
+   if(!o.codeTime) o.codeTime=nowStr();
+ });
+}
+function markSold(id){
+ update(id,o=>{
+   o.sold=true;
+   if(!o.soldTime) o.soldTime=nowStr();
+ });
+}
+function markFX(id){
+ update(id,o=>{
+   o.fx=true;
+   if(!o.fxTime) o.fxTime=nowStr();
+ });
+}
+function deleteOrder(id){
+ if(!confirm("确定删除？")) return;
+ let data=load().filter(x=>x.id!==id);
+ save(data);
+ document.getElementById("detail").innerHTML='<div class="card">请选择订单</div>';
+}
+renderList();
+</script>
+</body>
+</html>
