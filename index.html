@@ -27,6 +27,9 @@ button{padding:6px 10px;margin:6px 2px 2px 0;cursor:pointer;border:0;border-radi
 .check-item{display:flex;align-items:center;gap:4px;margin-top:8px;margin-bottom:4px;}
 .check-item input{width:auto;}
 .time-item{margin: 8px 0;}
+/* 新增日期筛选样式 */
+.date-filter{margin:8px 0;}
+.date-filter input{width:auto;min-width:180px;}
 </style>
 </head>
 <body>
@@ -60,6 +63,13 @@ button{padding:6px 10px;margin:6px 2px 2px 0;cursor:pointer;border:0;border-radi
 <button onclick="setFilter('all')">全部</button>
 <button onclick="setFilter('🍻')">🍻</button>
 <button onclick="setFilter('🚗')">🚗</button>
+<!-- 新增日期筛选区域 -->
+<div class="date-filter">
+<label>按下单日期筛选：</label>
+<input type="date" id="orderDateFilter">
+<button onclick="filterByDate()">筛选</button>
+<button onclick="clearDateFilter()">清空日期筛选</button>
+</div>
 </div>
 <div id="orderList"></div>
 </div>
@@ -70,10 +80,27 @@ button{padding:6px 10px;margin:6px 2px 2px 0;cursor:pointer;border:0;border-radi
 </div>
 <script>
 let currentFilter="all";
+let currentDateFilter = ""; // 新增：存储当前日期筛选条件
+
 function setFilter(f){
  currentFilter=f;
  renderList();
 }
+
+// 新增：按日期筛选订单
+function filterByDate() {
+  const dateInput = document.getElementById("orderDateFilter");
+  currentDateFilter = dateInput.value;
+  renderList();
+}
+
+// 新增：清空日期筛选
+function clearDateFilter() {
+  document.getElementById("orderDateFilter").value = "";
+  currentDateFilter = "";
+  renderList();
+}
+
 // 获取标准时间格式
 function nowStr(){
  const d=new Date();
@@ -82,6 +109,12 @@ function nowStr(){
  String(d.getHours()).padStart(2,'0')+":"+
  String(d.getMinutes()).padStart(2,'0');
 }
+
+// 辅助函数：提取日期（YYYY-MM-DD）
+function getDateStr(timeStr) {
+  return timeStr.split(" ")[0]; // 从 "YYYY-MM-DD HH:MM" 中提取日期部分
+}
+
 // 本地存储操作
 function save(data){
  localStorage.setItem("jpOrders",JSON.stringify(data));
@@ -89,11 +122,13 @@ function save(data){
 function load(){
  return JSON.parse(localStorage.getItem("jpOrders")||"[]");
 }
+
 // 切换游戏为其他时展示输入框
 document.getElementById("game").onchange=()=>{
  document.getElementById("otherBox").style.display=
  document.getElementById("game").value==="其他"?"block":"none";
 }
+
 // 新建订单
 function createOrder(){
  let game=document.getElementById("game").value;
@@ -124,16 +159,23 @@ function createOrder(){
  sellWay:"直接转账",
  isReceive:false,
  receiveTime:"",
- isTransfer:false
+ isTransfer:false, // 是否转钱
+ transferTime:""   // 转钱时间
  });
  save(data);
  renderList();
 }
-// 渲染订单列表，所有状态独立展示
+
+// 渲染订单列表，增加日期筛选和转钱状态展示
 function renderList(){
  let data=load().slice().reverse();
+ // 1. 归属人筛选
  if(currentFilter!=="all"){
    data=data.filter(o=>o.owner===currentFilter);
+ }
+ // 2. 日期筛选
+ if(currentDateFilter) {
+   data = data.filter(o => getDateStr(o.orderTime) === currentDateFilter);
  }
  let html="";
  data.forEach(o=>{
@@ -142,18 +184,21 @@ function renderList(){
    if(o.sold) statusText.push('💰已售出');
    if(o.fx) statusText.push('💱已购汇');
    if(o.isReceive) statusText.push('✅已确收');
+   if(o.isTransfer) statusText.push('💸已转钱'); // 新增：展示转钱状态
    if(statusText.length === 0) statusText.push('🛒已下单');
 
    html+=`
    <div class="order" onclick="showOrder('${o.id}')">
    <b>${o.owner} ${o.game}</b><br>
    <span class="small">${o.id}</span><br>
+   <span class="small">下单时间：${o.orderTime}</span><br> <!-- 新增：显示下单时间 -->
    <span class="small">${statusText.join(' | ')}</span>
    </div>`;
  });
  document.getElementById("orderList").innerHTML=html;
 }
-// 展示订单详情（核心：固定确收区域，不再动态切换）
+
+// 展示订单详情（新增标记转钱功能）
 function showOrder(id){
  let data=load();
  let o=data.find(x=>x.id===id);
@@ -165,17 +210,18 @@ function showOrder(id){
     <option value="走闲鱼" ${o.sellWay==='走闲鱼'?'selected':''}>走闲鱼</option>
   </select>
  `;
- let transferCheckHtml = '';
+ let transferHtml = '';
  if(o.owner === '🚗'){
-  transferCheckHtml = `
-  <div class="check-item">
-    <input type="checkbox" id="isTransfer_${id}" ${o.isTransfer?'checked':''}>
-    <span>是否转钱</span>
+  transferHtml = `
+  <div class="time-item">
+    <label>转钱时间</label>
+    <input id="transferTime_${id}" value="${o.transferTime||''}">
+    <button onclick="markTransfer('${id}')">标记转钱</button>
   </div>
   `;
  }
 
- // 页面布局：确收时间+标记确收 永久显示
+ // 页面布局：确收区域固定显示
  document.getElementById("detail").innerHTML=`
  <div class="card">
  <h2>${o.owner} ${o.game}</h2>
@@ -213,7 +259,7 @@ function showOrder(id){
  ${sellWayHtml}
  </div>
 
- <!-- 确收区域：固定显示，不受售出方式影响 -->
+ <!-- 确收区域：固定显示 -->
  <div class="time-item">
   <label>确收时间</label>
   <input id="receiveTime_${id}" value="${o.receiveTime||''}">
@@ -229,8 +275,11 @@ function showOrder(id){
  <div>
  <label>售价</label>
  <input id="price_${id}" value="${o.salePrice||''}">
- ${transferCheckHtml}
  </div>
+
+ <!-- 新增：转钱区域 -->
+ ${transferHtml}
+
  </div>
  <hr>
  <button onclick="saveEdit('${id}')">保存修改</button>
@@ -248,7 +297,7 @@ function update(id,fn){
  showOrder(id);
 }
 
-// 保存所有编辑内容
+// 保存所有编辑内容（新增转钱时间保存）
 function saveEdit(id){
  update(id,o=>{
    o.orderTime=document.getElementById("orderTime_"+id).value;
@@ -259,8 +308,9 @@ function saveEdit(id){
    o.sellWay = document.getElementById("sellWay_"+id).value;
    o.receiveTime = document.getElementById("receiveTime_"+id).value;
    o.fxAmount = document.getElementById("fxAmount_"+id).value;
-   if(document.getElementById("isTransfer_"+id)){
-     o.isTransfer = document.getElementById("isTransfer_"+id).checked;
+   // 新增：保存转钱时间
+   if(document.getElementById("transferTime_"+id)){
+     o.transferTime = document.getElementById("transferTime_"+id).value;
    }
  });
 }
@@ -294,6 +344,14 @@ function markReceive(id){
  update(id,o=>{
    o.isReceive=true;
    if(!o.receiveTime) o.receiveTime=nowStr();
+ });
+}
+
+// 新增：标记转钱
+function markTransfer(id) {
+ update(id,o=>{
+   o.isTransfer=true;
+   if(!o.transferTime) o.transferTime=nowStr();
  });
 }
 
